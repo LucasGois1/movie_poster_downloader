@@ -35,8 +35,8 @@ async def get_movie(movie_id: int):
                 content = await response.json()
                 return Movie(
                     id=content['id'],
-                    name=content['belongs_to_collection']['name'],
-                    poster_path=content['belongs_to_collection']['poster_path'].replace('/', '-')[1:]
+                    name=content['belongs_to_collection']['name'].replace('/', '-'),
+                    poster_path=content['belongs_to_collection']['poster_path'][1:]
                 )
 
             if response.status == 404:
