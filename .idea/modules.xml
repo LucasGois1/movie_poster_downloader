@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/QueueLearning.iml" filepath="$PROJECT_DIR$/.idea/QueueLearning.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/AsyncioLearning.iml" filepath="$PROJECT_DIR$/.idea/AsyncioLearning.iml" />
     </modules>
   </component>
 </project>
