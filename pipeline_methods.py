@@ -1,10 +1,12 @@
 import asyncio
 import os
+from asyncio import Semaphore
 from collections import Counter
 from http import HTTPStatus
 
 import aiohttp
 import tqdm
+from aiofile import async_open
 from aiohttp.http_exceptions import HttpProcessingError
 from aiohttp.web_exceptions import HTTPNotFound
 
@@ -19,18 +21,19 @@ LANGUAGE = 'pt_BR'
 DEST_DIR = '/Users/lucasgois/Desktop/movie_images'
 
 
-def save_image(img_bytes: bytes, filename: str, file_format: str = 'jpg'):
+async def save_image(img_bytes: bytes, filename: str, file_format: str = 'jpg'):
     path = os.path.join(DEST_DIR, f'{filename}.{file_format}')
 
-    with open(path, 'wb') as file:
-        file.write(img_bytes)
+    async with async_open(path, 'wb') as file:
+        await file.write(img_bytes)
 
 
-async def get_movie(movie_id: int):
+async def get_movie(movie_id: int, semaphore: Semaphore):
     url = f'{BASE_URL_INFORMATION}/movie/{movie_id}?api_key={API_KEY}&language={LANGUAGE}'
 
     async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
+        async with semaphore, session.get(url) as response:
+
             if response.status == 200:
                 content = await response.json()
                 return Movie(
@@ -46,11 +49,11 @@ async def get_movie(movie_id: int):
                 raise HttpProcessingError()
 
 
-async def get_poster(poster_path: str, width: int):
+async def get_poster(poster_path: str, width: int, semaphore: Semaphore):
     url = f'{BASE_URL_IMAGES}/w{width}/{poster_path}'
 
     async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
+        async with semaphore, session.get(url) as response:
             if response.status == 200:
                 poster = await response.read()
                 return poster
@@ -62,33 +65,32 @@ async def get_poster(poster_path: str, width: int):
                 raise HttpProcessingError()
 
 
-async def pipeline(movie_id: int):
+async def pipeline(movie_id: int, semaphore: Semaphore):
     try:
-        filme = await get_movie(movie_id)
-        filme['poster_bytes'] = await get_poster(poster_path=filme['poster_path'], width=500)
+        filme = await get_movie(movie_id, semaphore)
+        filme['poster_bytes'] = await get_poster(filme['poster_path'], 1080, semaphore)
 
     except HTTPNotFound:
-        status = HTTPStatus.NOT_FOUND
-        msg = 'Filme não encontrado.'
+        status, msg = HTTPStatus.NOT_FOUND, 'Filme não encontrado.'
 
     except Exception as exc:
         raise FetchError(f'ID: {movie_id}') from exc
 
     else:
-        save_image(filme['poster_bytes'], filme['name'])
+        await save_image(filme['poster_bytes'], filme['name'])
 
-        status = HTTPStatus.OK
-        msg = 'OK'
+        status, msg = HTTPStatus.OK, 'Download finalizado de {filme}'.format(filme=filme['name'])
 
     return Result(status, msg)
 
 
 async def get_content(init, end):
     counter = Counter()
-    to_do = [pipeline(movie_id) for movie_id in range(init, end)]
+    semaphore = Semaphore(5)
+    to_do = [pipeline(movie_id, semaphore) for movie_id in range(init, end)]
 
     tasks = asyncio.as_completed(to_do)
-    tasks = tqdm.tqdm(tasks, total=end - init, colour='#0000ff')
+    tasks = tqdm.tqdm(tasks, desc="Concluído", total=end - init, colour='#ffff00')
 
     for future in tasks:
         try:
@@ -99,8 +101,8 @@ async def get_content(init, end):
 
         else:
             status = response.status
+            tasks.set_postfix_str(response.msg)
 
         counter[status] += 1
 
     return counter
-

@@ -1,15 +1,15 @@
 import asyncio
 
+import uvloop as uvloop
+
 from pipeline_methods import get_content
 
 
 def main():
-    loop = asyncio.get_event_loop()
-    download_pipeline = get_content(1, 10000)
-    counts = loop.run_until_complete(download_pipeline)
-    loop.close()
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+    counter = asyncio.run(get_content(10000, 20000))
 
-    return counts
+    return counter
 
 
 if __name__ == '__main__':
